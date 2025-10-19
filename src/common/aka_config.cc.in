@@ -1,0 +1,13 @@
+/* -------------------------------------------------------------------------- */
+#include "aka_config.hh"
+/* -------------------------------------------------------------------------- */
+
+namespace akantu {
+std::string_view getVersion() {
+  // clang-format off
+  constexpr std::string_view version = {
+      "@AKANTU_MAJOR_VERSION@.@AKANTU_MINOR_VERSION@.@AKANTU_PATCH_VERSION@@AKANTU_PRERELEASE_VERSION@@AKANTU_LOCAL_VERSION@"};
+  // clang-format on
+  return version;
+}
+} // namespace akantu

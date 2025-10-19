@@ -1,0 +1,378 @@
+---
+# yaml-language-server: $format.enable=false
+
+stages:
+  - version
+  - configure
+  - build_libs
+  - build_tests
+  - test
+  - code_quality
+  - deploy
+  - release
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG =~ /^v[0-9].*$/
+
+include:
+  - local: ".gitlab/ci.d/*.yaml"
+  - component: $CI_SERVER_FQDN/swepy/cicd-templates/ruff/ruff@6.1.1
+    inputs:
+      allow-failure: true
+      stage: code_quality
+  - component: $CI_SERVER_FQDN/epfl-lsms/cicd-templates/cicd-templates-cpp/clang-tidy@~latest
+    inputs:
+      stage: code_quality
+      extra_arguments: "-x third-party -x extra-packages -x build"
+      cmake_arguments: "-DAKANTU_PYTHON=ON -DAKANTU_EXAMPLES=ON -DAKANTU_TESTS=ON -DAKANTU_PARALLEL=ON"
+      image: registry.gitlab.com/akantu/akantu/code_quality:latest
+  - component: $CI_SERVER_FQDN/epfl-lsms/cicd-templates/cicd-templates-cpp/clang-format@~latest
+    inputs:
+      stage: code_quality
+      extra_arguments: "-x third-party -x extra-packages -x build"
+      cmake_arguments: "-DAKANTU_PYTHON=ON -DAKANTU_EXAMPLES=ON -DAKANTU_TESTS=ON -DAKANTU_PARALLEL=ON"
+      image: registry.gitlab.com/akantu/akantu/code_quality:latest
+  - component: $CI_SERVER_FQDN/epfl-lsms/cicd-templates/cicd-templates-cpp/warning-parser@~latest
+    inputs:
+      stage: code_quality
+      needs:
+        - job: build_libs:debian_stable_clang
+        - job: build_libs:debian_stable_gcc
+        - job: build_libs:ubuntu_lts_gcc
+      files_wildcard: build-*.log
+
+#-------------------------------------------------------------------------------
+# Rebuilding the docker images if needed
+#-------------------------------------------------------------------------------
+docker build:debian-stable:
+  variables:
+    IMAGE_NAME: 'debian:bookworm'
+  extends: .docker_build
+
+docker build:ubuntu-lts:
+  variables:
+    IMAGE_NAME: 'ubuntu:lts'
+  extends: .docker_build
+
+docker build:manylinux:
+  variables:
+    IMAGE_NAME: 'manylinux_2_28_x86_64:latest'
+  extends: .docker_build
+
+docker build:debian-testing:
+  variables:
+    IMAGE_NAME: 'debian:testing'
+  extends: .docker_build
+
+
+version_determination:
+  stage: version
+  image: python:latest
+  variables:
+    GIT_STRATEGY: fetch
+    GIT_DEPTH: 500
+    GIT_FETCH_EXTRA_FLAGS: --prune --prune-tags --quiet
+  script:
+    - python3 cmake/semver.py > VERSION
+    - cat VERSION
+  artifacts:
+    when: on_success
+    paths:
+      - VERSION
+    expire_in: 1day
+
+# ------------------------------------------------------------------------------
+# Debian stable compiled with GCC
+# ------------------------------------------------------------------------------
+configure:debian_stable_gcc:
+  extends:
+    - .debian_stable_gcc
+    - .build_coverage
+    - .configure
+  needs:
+    - version_determination
+
+build_libs:debian_stable_gcc:
+  extends:
+    - .debian_stable_gcc
+    - .build_coverage
+    - .build_libs
+  needs:
+    - job: configure:debian_stable_gcc
+
+build_tests:debian_stable_gcc:
+  extends:
+    - .debian_stable_gcc
+    - .build_coverage
+    - .build_tests
+  needs:
+    - job: build_libs:debian_stable_gcc
+
+test:debian_stable_gcc:
+  extends:
+    - .debian_stable_gcc
+    - .build_coverage
+    - .tests
+  needs:
+    - job: build_tests:debian_stable_gcc
+
+# ------------------------------------------------------------------------------
+# Debian stable compiled with Clang
+# ------------------------------------------------------------------------------
+configure:debian_stable_clang:
+  extends:
+    - .debian_stable_clang
+    - .build_release
+    - .configure
+  needs:
+    - version_determination
+
+build_libs:debian_stable_clang:
+  extends:
+    - .debian_stable_clang
+    - .build_release
+    - .build_libs
+  needs:
+    - job: configure:debian_stable_clang
+
+build_tests:debian_stable_clang:
+  extends:
+    - .debian_stable_clang
+    - .build_release
+    - .build_tests
+  needs:
+    - job: build_libs:debian_stable_clang
+
+test:debian_stable_clang:
+  extends:
+    - .debian_stable_clang
+    - .build_release
+    - .tests
+  needs:
+    - job: build_tests:debian_stable_clang
+
+# ------------------------------------------------------------------------------
+# Ubuntu LTS compiled with GCC
+# ------------------------------------------------------------------------------
+configure:ubuntu_lts_gcc:
+  extends:
+    - .ubuntu_lts_gcc
+    - .build_release
+    - .configure
+  needs:
+    - version_determination
+
+build_libs:ubuntu_lts_gcc:
+  extends:
+    - .ubuntu_lts_gcc
+    - .build_release
+    - .build_libs
+  needs:
+    - job: configure:ubuntu_lts_gcc
+
+build_tests:ubuntu_lts_gcc:
+  extends:
+    - .ubuntu_lts_gcc
+    - .build_release
+    - .build_tests
+  needs:
+    - job: build_libs:ubuntu_lts_gcc
+
+test:ubuntu_lts_gcc:
+  extends:
+    - .ubuntu_lts_gcc
+    - .build_release
+    - .tests
+  needs:
+    - job: build_tests:ubuntu_lts_gcc
+
+# ------------------------------------------------------------------------------
+# Debian stable compiled with GCC tested with valgrind
+# ------------------------------------------------------------------------------
+configure:ubuntu_lts_gcc_valgrind:
+  extends:
+    - .ubuntu_lts_gcc
+    - .build_valgrind
+    - .configure
+  needs:
+    - version_determination
+
+build_libs:ubuntu_lts_gcc_valgrind:
+  extends:
+    - .ubuntu_lts_gcc
+    - .build_valgrind
+    - .build_libs
+  needs:
+    - job: configure:ubuntu_lts_gcc_valgrind
+
+build_tests:ubuntu_lts_gcc_valgrind:
+  extends:
+    - .ubuntu_lts_gcc
+    - .build_valgrind
+    - .build_tests
+  needs:
+    - job: build_libs:ubuntu_lts_gcc_valgrind
+
+test:ubuntu_lts_gcc_valgrind:
+  extends:
+    - .ubuntu_lts_gcc
+    - .build_valgrind
+    - .tests
+  needs:
+    - job: build_tests:ubuntu_lts_gcc_valgrind
+
+# ------------------------------------------------------------------------------
+# Manylinux to build python packages
+# ------------------------------------------------------------------------------
+configure:python_package:
+  extends:
+    - .manylinux_gcc
+    - .configure_python
+  needs:
+    - version_determination
+
+build_akantu:python_package:
+  extends:
+    - .build_python_akantu
+    - .manylinux_gcc
+  needs:
+    - job: configure:python_package
+
+build_pip:python_package:
+  extends:
+    - .code_only
+    - .build_release
+    - .manylinux_gcc
+    - .build_python_package
+  needs:
+    - job: build_akantu:python_package
+
+test:python_package:
+  extends:
+    - .test_python_package
+    - .code_only
+  image: python:3.10
+  needs:
+    - job: build_pip:python_package
+  before_script:
+    - apt update && apt install -y gmsh
+
+# ------------------------------------------------------------------------------
+# MacOS X to build python packages
+# ------------------------------------------------------------------------------
+configure:python_package_macos:
+  extends:
+    - .configure_python
+    - .macos_clang
+  needs:
+    - version_determination
+
+build_akantu:python_package_macos:
+  extends:
+    - .build_python_akantu
+    - .macos_clang
+  needs:
+    - job: configure:python_package_macos
+
+build_pip:python_package_macos:
+  extends:
+    - .build_python_package
+    - .macos_clang
+  needs:
+    - job: build_akantu:python_package_macos
+
+test:python_package_macos:
+  extends:
+    - .test_python_package
+    - .macos_clang
+  needs:
+    - job: build_pip:python_package_macos
+
+# ------------------------------------------------------------------------------
+# PYPI Upload
+# ------------------------------------------------------------------------------
+package:python_gitlab:
+  stage: deploy
+  image: python:latest
+  variables:
+    TWINE_PASSWORD: ${CI_JOB_TOKEN}
+    TWINE_USERNAME: gitlab-ci-token
+  script:
+    - pip install twine
+    - python3 -m twine upload --repository-url https://gitlab.com/api/v4/projects/${CI_PROJECT_ID}/packages/pypi
+              wheelhouse/*
+              wheelhouse_macos/*
+  needs:
+    - job: build_pip:python_package
+    - job: test:python_package
+    - job: build_pip:python_package_macos
+    - job: test:python_package_macos
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+package:python_pypi:
+  stage: deploy
+  image: python:latest
+  variables:
+    TWINE_PASSWORD: ${PYPI_TOKEN}
+    TWINE_USERNAME: __token__
+  script:
+    - pip install twine
+    - python3 -m twine upload --verbose
+              wheelhouse/*
+              wheelhouse_macos/*
+  needs:
+    - job: build_pip:python_package
+    - job: test:python_package
+    - job: build_pip:python_package_macos
+    - job: test:python_package_macos
+  rules:
+    - if: $CI_COMMIT_TAG && $CI_COMMIT_TAG =~ /v[0-9]+.*/
+
+# ------------------------------------------------------------------------------
+# Release
+# ------------------------------------------------------------------------------
+package:release:
+  stage: release
+  image: registry.gitlab.com/akantu/akantu/debian:testing
+  variables:
+    EXAMPLES_PACKAGE: "akantu-python-examples-${CI_COMMIT_TAG}.tgz"
+    PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/akantu-examples/${CI_COMMIT_TAG}"
+  cache:
+    - key: BUILD-debian_stable_clang-Release-${CI_COMMIT_SHORT_SHA}
+      policy: pull
+      paths:
+        - build/
+  rules:
+    - if: $CI_COMMIT_TAG && $CI_COMMIT_TAG =~ /v[0-9]+.*/
+  script:
+    - >
+      export VERSION=$(cat VERSION)
+
+      tar -czf akantu-python-examples-${CI_COMMIT_TAG}.tgz \
+         --exclude "CMakeFiles" \
+         --exclude "*\.cmake" \
+         --exclude "Makefile" \
+         --transform "s:^build/examples/python:akantu-python-examples:" \
+         build/examples/python
+
+      curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+           --upload-file "${EXAMPLES_PACKAGE}" \
+           "${PACKAGE_REGISTRY_URL}/${EXAMPLES_PACKAGE}"
+
+      export DESCRIPTION=$(markdown-extract "Version ${VERSION}" CHANGELOG.md)
+
+      release-cli create \
+        --name "Version ${VERSION}" \
+        --description "${DESCRIPTION}" \
+        --tag-name "${CI_COMMIT_TAG}" \
+        --assets-link "{\"name\": \"Python Examples\", \"url\": \"${PACKAGE_REGISTRY_URL}/${EXAMPLES_PACKAGE}\", \"link_type\":  \"package\"}" \
+        --assets-link "{\"name\": \"PyPi package\", \"url\": \"https://pypi.org/project/akantu/${VERSION}/\", \"link_type\":  \"package\"}" \
+        --assets-link "{\"name\": \"Documentation\", \"url\": \"https://akantu.readthedocs.io/en/${CI_COMMIT_TAG}/\", \"link_type\": \"other\"}"
+  needs:
+    - job: build_tests:debian_stable_clang
+    - job: version_determination
+    - job: package:python_pypi

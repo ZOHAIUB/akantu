@@ -1,0 +1,37 @@
+#===============================================================================
+# Copyright (©) 2010-2023 EPFL (Ecole Polytechnique Fédérale de Lausanne)
+# Laboratory (LSMS - Laboratoire de Simulation en Mécanique des Solides)
+#
+# This file is part of Akantu
+# 
+# Akantu is free software: you can redistribute it and/or modify it under the
+# terms of the GNU Lesser General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your option) any
+# later version.
+# 
+# Akantu is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+# A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
+# details.
+# 
+# You should have received a copy of the GNU Lesser General Public License along
+# with Akantu. If not, see <http://www.gnu.org/licenses/>.
+#
+#===============================================================================
+
+
+akantu_pybind11_add_module(py11_akantu_test_common MODULE test_common.cc)
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  target_compile_options(py11_akantu_test_common PUBLIC -fsized-deallocation)
+endif()
+
+add_mesh(mesh_dcb_2d mesh_dcb_2d.geo 2 2)
+
+register_test(test_python_interface
+  SCRIPT test_pybind.py
+  PYTHON
+  FILES_TO_COPY elastic.dat
+  DEPENDS mesh_dcb_2d py11_akantu_test_common
+  PACKAGE python_interface
+  )

@@ -1,0 +1,50 @@
+Checks: "
+        -*,
+
+        modernize-use-*,
+        -modernize-use-trailing-return-type*,
+
+        cppcoreguidelines-*,
+        -cppcoreguidelines-macro-usage,
+        -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+        -cppcoreguidelines-non-private-member-variables-in-classes,
+        -cppcoreguidelines-avoid-const-or-ref-data-members,
+        -cppcoreguidelines-avoid-do-while,
+        -cppcoreguidelines-avoid-magic-numbers,
+        -cppcoreguidelines-missing-std-forward,
+
+        performance-*,
+
+        readability-*,
+        -readability-magic-numbers,
+        -readability-redundant-access-specifiers,
+        -readability-convert-member-functions-to-static,
+        -readability-isolate-declaration,
+        -readability-identifier-length,
+        "
+
+HeaderFilterRegex:     'src/.*'
+FormatStyle:           file
+UseColor:              true
+
+CheckOptions:
+  - key: readability-identifier-length.IgnoreVariableNames
+    value: True
+  - key: readability-identifier-length.MinimumLoopCounterNameLength
+    value: 1
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.ClassMemberCase
+    value: lower_case
+  - key: readability-identifier-naming.ClassMethodCase
+    value: camelBack
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.ClassIgnoredRegexp
+    value: '.*_[vt]$'
+  - key: cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor
+    value: true
+  - key: cppcoreguidelines-pro-type-const-cast.Strict
+    value: false
